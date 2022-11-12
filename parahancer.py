@@ -58,7 +58,7 @@ def main(parser=argparse.ArgumentParser()):
       "contrast_factor", type=int, help="Adjusts the contrast factor."
    )
    parser.add_argument(
-      "max_thread_count", type=str, nargs="?", default=MAX_THREAD_COUNT, help="The maximum number of threads to use." # Defaults to MAX_THREAD_COUNT
+      "max_thread_count", type=int, nargs="?", default=MAX_THREAD_COUNT, help="The maximum number of threads to use." # Defaults to MAX_THREAD_COUNT
    )
    # Parse the command line parameters upon executing the program
    args = parser.parse_args()
