@@ -7,6 +7,7 @@
 
 import os
 import time
+from datetime import datetime
 import threading
 from concurrent.futures import ThreadPoolExecutor
 import numpy as np
@@ -65,6 +66,19 @@ def apply_brightness_contrast_sharpness(imgset: ImageSet, brightness_factor: int
    output_image = sharpness.enhance(sharpness_factor)
    imgset.set_new_image(output_image)
    return imgset
+
+# Writes run stats to a text file
+def write_stats_text_file(start_timestamp: str, enhancement_duration: str, total_duration: str, in_dir: str, out_dir: str, number_processed: int):
+   with open('stats.txt', 'w') as text_file:
+      text_file.write("Parahancer Image Enhancement\nby John Matthew Gan and Gabriel Marquez\n\n")
+      text_file.write("Execution started: %s\n" %start_timestamp)
+      text_file.write("Enhancement execution time:  %s\n" %enhancement_duration)
+      text_file.write("Total execution time:  %s\n" %total_duration)
+      text_file.write("Number of files processed: %d\n" %number_processed)
+      text_file.write("Input directory: %s\n" %in_dir)
+      text_file.write("Output directory: %s" %out_dir)
+      text_file.close()
+   return os.path.abspath('./stats.txt')
 
 # Image loading, saving, and displaying
 def print_image_filenames(imgset_list: list):
@@ -174,6 +188,10 @@ def main(parser=argparse.ArgumentParser()):
    parser.add_argument(
       "max_thread_count", type=int, nargs="?", default=MAX_THREAD_COUNT, help="The maximum number of threads to use." # Defaults to MAX_THREAD_COUNT
    )
+
+   # Get the exact time and date of execution
+   executed_timestamp = time.time()
+
    # Parse the command line parameters upon executing the program
    args = parser.parse_args()
    print("")
@@ -262,8 +280,8 @@ def main(parser=argparse.ArgumentParser()):
    start_time = time.time()
    output_image_list = method_5()
    #method_2()
-   end_time = time.time() - start_time
-   print("\nFinished in %0.4f seconds" %end_time)
+   enhancement_time = time.time() - start_time
+   print("\nFinished in %0.4f seconds" %enhancement_time)
 
    # Save images
    imgset: ImageSet
@@ -275,6 +293,21 @@ def main(parser=argparse.ArgumentParser()):
 
    print("\nSaving %d image(s)..." %len(output_image_list))
    save_images(output_image_list, args.output_dir)
+
+   # Calculate enhancement and total execution time
+   total_time = time.time() - executed_timestamp
+   total_duration = datetime.fromtimestamp(total_time)
+   enhancement_duration = datetime.fromtimestamp(enhancement_time)
+
+   # Save stats to text file
+   text_file_path = write_stats_text_file(
+      datetime.fromtimestamp(executed_timestamp),
+      enhancement_duration.strftime('%#M min %#S.%f sec'),
+      total_duration.strftime('%#M min %#S.%f sec'), 
+      args.input_dir, args.output_dir, 
+      len(output_image_list)
+   )
+   print("\nRun stats saved to %s" %text_file_path)
    print("\nDone!")
 
 
