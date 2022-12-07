@@ -3,16 +3,19 @@
 # 
 # Sample inputs:
 #     parahancer E:\Input E:\Output 3 2 4 6 
-#     parahancer E:\Input E:\Output 5 1 2 3 2
+#     parahancer E:\Input E:\Output 5 1 2 3 100
 
 import os
+import time
+import threading
+from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 import cv2
 import PIL.Image as Image
 import PIL.ImageEnhance as ImageEnhance
 import argparse
 
-MAX_THREAD_COUNT = 5          # maximum number of threads at any given time
+MAX_THREAD_COUNT = 61         # maximum number of threads on Windows is 61
 PREVIEW_IMAGE_WIDTH = 800     # width of images in preview windows
 
 # Container for image and metadata
@@ -35,23 +38,33 @@ class ImageSet:
       self.new_image = image
 
 # Image manipulation
-def apply_brightness(imgset: ImageSet, brightness_factor: int = 0):
+def apply_brightness(imgset: ImageSet, brightness_factor: int):
    brightness = ImageEnhance.Brightness(imgset.get_new_image())
    output_image = brightness.enhance(brightness_factor)
    imgset.set_new_image(output_image)
    #show_image(imgset)
 
-def apply_contrast(imgset: ImageSet, contrast_factor: int = 0):
+def apply_contrast(imgset: ImageSet, contrast_factor: int):
    contrast = ImageEnhance.Contrast(imgset.get_new_image())
    output_image = contrast.enhance(contrast_factor)
    imgset.set_new_image(output_image)
    #show_image(imgset)
 
-def apply_sharpness(imgset: ImageSet, sharpness_factor: int = 0):
+def apply_sharpness(imgset: ImageSet, sharpness_factor: int):
    sharpness = ImageEnhance.Sharpness(imgset.get_new_image())
    output_image = sharpness.enhance(sharpness_factor)
    imgset.set_new_image(output_image)
    #show_image(imgset)
+
+def apply_brightness_contrast_sharpness(imgset: ImageSet, brightness_factor: int, contrast_factor: int, sharpness_factor: int):
+   brightness = ImageEnhance.Brightness(imgset.get_new_image())
+   output_image = brightness.enhance(brightness_factor)
+   contrast = ImageEnhance.Contrast(output_image)
+   output_image = contrast.enhance(contrast_factor)
+   sharpness = ImageEnhance.Sharpness(output_image)
+   output_image = sharpness.enhance(sharpness_factor)
+   imgset.set_new_image(output_image)
+   return imgset
 
 # Image loading, saving, and displaying
 def print_image_filenames(imgset_list: list):
@@ -85,6 +98,7 @@ def load_images(input_dir: str) -> list:
    imgset_list = []
    for filename in os.listdir(input_dir):
       loaded_filename = os.path.join(input_dir, filename)
+      #print(loaded_filename)
       img = cv2.imread(filename=loaded_filename)
       if img is not None:
          imgset_list.append(
@@ -126,6 +140,12 @@ def is_dir_path(dir_path: str) -> bool:
       return True
    raise NotADirectoryError(dir_path)
 
+# Returns true if there is still remaining time
+def check_for_remaining_time(old_time: float, max_duration_in_mins: int) -> bool:
+   """
+   Returns true if there is still remaining time according to the maximum time argument
+   """
+   return True if time.time() - old_time > (max_duration_in_mins * 60) else False
 
 # Main function
 def main(parser=argparse.ArgumentParser()):
@@ -140,7 +160,7 @@ def main(parser=argparse.ArgumentParser()):
       "output_dir", type=str, help="The file directory to put output images into."
    )
    parser.add_argument(
-      "max_time_in_min", type=int, help="The maximum total time that the image processing can run for."
+      "max_time_in_min", type=int, default=np.int32, help="The maximum total time that the image processing can run for."
    )
    parser.add_argument(
       "brightness_factor", type=int, help="Adjusts the brightness factor."
@@ -171,9 +191,10 @@ def main(parser=argparse.ArgumentParser()):
    print("Maximum number of threads: %d" %args.max_thread_count)
    
    # Load images into a queue
+   print("\nLoading images...")
    input_image_list = load_images(args.input_dir)
-   print("\nLoaded %d image(s): " %len(input_image_list))
-   print_image_filenames(input_image_list)
+   print("\nLoaded %d image(s) " %len(input_image_list))
+   #print_image_filenames(input_image_list)
 
    # Create a queue of images to manipulate
    output_image_list = []
@@ -186,36 +207,63 @@ def main(parser=argparse.ArgumentParser()):
       # Populate queue
       output_image_list.append(imgset)
 
-   # Run image manipulation on the queue
-   print("")
-   ctr = 1
-   imgset: ImageSet
-   for imgset in output_image_list:
-      # Apply brightness
-      print("Applying brightness... (%d/%d)" %(ctr, len(output_image_list)))
-      apply_brightness(imgset, args.brightness_factor)
-      # Update counter
-      ctr += 1
+   def method_1():
+      imgset: ImageSet
+      for imgset in output_image_list:
+         apply_brightness(imgset, args.brightness_factor)
 
-   print("")
-   ctr = 1
-   imgset: ImageSet
-   for imgset in output_image_list:
-      # Apply contrast
-      print("Applying contrast... (%d/%d)" %(ctr, len(output_image_list)))
-      apply_contrast(imgset, args.contrast_factor)
-      # Update counter
-      ctr += 1
+      imgset: ImageSet
+      for imgset in output_image_list:
+         apply_contrast(imgset, args.contrast_factor)
 
-   print("")
-   ctr = 1
-   imgset: ImageSet
-   for imgset in output_image_list:
-      # Apply sharpness
-      print("Applying sharpness... (%d/%d)" %(ctr, len(output_image_list)))
-      apply_sharpness(imgset, args.sharpness_factor)
-      # Update counter
-      ctr += 1
+      imgset: ImageSet
+      for imgset in output_image_list:
+         apply_sharpness(imgset, args.sharpness_factor)
+
+   def method_2():
+      imgset: ImageSet
+      for imgset in output_image_list:
+         apply_brightness(imgset, args.brightness_factor)
+         apply_contrast(imgset, args.contrast_factor)
+         apply_sharpness(imgset, args.sharpness_factor)
+
+   def method_3():
+      imgset: ImageSet
+      for imgset in output_image_list:
+         t1 = threading.Thread(target=apply_brightness, args=(imgset, args.brightness_factor))
+         t2 = threading.Thread(target=apply_contrast, args=(imgset, args.contrast_factor))
+         t3 = threading.Thread(target=apply_sharpness, args=(imgset, args.sharpness_factor))
+         t1.start()
+         t2.start()
+         t3.start()
+         t1.join()
+         t2.join()
+         t3.join()
+
+   def method_4():
+      imgset: ImageSet
+      for imgset in output_image_list:
+         thread = threading.Thread(target=apply_brightness_contrast_sharpness, args=(imgset, args.brightness_factor, args.contrast_factor, args.sharpness_factor))
+         thread.start()
+         thread.join()
+
+   def method_5():
+      with ThreadPoolExecutor(max_workers=args.max_thread_count) as executor:
+         results = executor.map(apply_brightness_contrast_sharpness, output_image_list, 
+            [args.brightness_factor for _ in output_image_list], 
+            [args.contrast_factor for _ in output_image_list],
+            [args.sharpness_factor for _ in output_image_list],
+            timeout=args.max_time_in_min)
+
+      return list(results)
+
+   # Run the processing and calculate execution time
+   print("\nRunning...")
+   start_time = time.time()
+   output_image_list = method_5()
+   #method_2()
+   end_time = time.time() - start_time
+   print("\nFinished in %0.4f seconds" %end_time)
 
    # Save images
    imgset: ImageSet
